@@ -36,8 +36,6 @@ Servo baseServo;      // Base rotation (0-360° capable)
 Servo shoulderServo;  // Shoulder joint (0-180°)
 Servo elbowServo;    // Elbow joint (0-180°)
 Servo gripperServo;  // Gripper (0-180°)
-Servo rightServo;
-Servo leftServo;
 
 
 // Pin definitions
@@ -46,15 +44,6 @@ const int SHOULDER_PIN = 11;
 const int ELBOW_PIN = 8;
 const int GRIPPER_PIN = 9;
 
-const int right_pin = 10;
-const int left_pin = 6;
-
-int ini_right = 0 ;
-int ini_left = 180 ;
-
-
-
-
 
 // Variables to store servo positions
 int basePos = 120;     // Initial position for base (0-360°)
@@ -62,6 +51,7 @@ int shoulderPos = 0;  // Initial position for shoulder (0-180°)
 int elbowPos = 180;   // Initial position for elbow (0-180°)
 int gripperPos = 0;   // Gripper fully closed initially (0-180°)
 int ball_count=0;
+
 
 // for IR_array
 const int SensorCount = 8; // Total number of sensors
@@ -82,12 +72,10 @@ int increment_count = 1;
 
 long ldistance;
 long rdistance;
-
 float error;
 
 // PID variables
 float P, I, D, previousError = 0;
-
 float lsp, rsp;
 int lfspeed = 200;
 
@@ -105,15 +93,15 @@ void Task1();
 void moveStraightPID();
 void moveTurnRightPID();
 void moveTurnLeftPID();
-void againcheck(int *sensorValues, int count);
+void check_juction( int count);
 void backward_B1();
 void backward_B2();
 void backward_B3();
 void small_backward();
-void moveForward(int *sensorValues, int count);
+void check_juction_second(int *sensorValues, int count);
 void encoderISR_A();
 void encoderISR_B();
-void colour_line_follow();
+void line_follow_juction_turns();
 void line_follow(int *sensorValues);
 bool isImmediateTurnL(int *sensorValues);
 bool isImmediateTurnR(int *sensorValues);
@@ -124,7 +112,7 @@ void colomcheck();
 void move_for_grabbing(int count);
 //void turnRight45();
 //void turnLeft45();
-void turnRightStart();
+void task1_start();
 void half_rotation();
 void PID_Linefollow(float pidValue);
 void smoothMoveServo(Servo &servo, int &currentPos, int targetPos);
@@ -142,7 +130,7 @@ L298N motor2(PWMB, BIN1, BIN2);
 // Encoder counts
 volatile long encoderCountA = 0; // Encoder count for Motor A
 volatile long encoderCountB = 0; // Encoder count for Motor B
-const long targetCounts = 190; // Desired encoder counts for 90 degree turns
+const long targetCounts = 190;   // 185       // Desired encoder counts for 90 degree turns
 const long targetCounts_rotation = 360; // Desired encoder counts for 180 degree turns
 const int count_moveForward = 85;
 const int count_moveForward_w = 125;
@@ -161,25 +149,14 @@ int plus = 0;
 bool is_plus=false;
 
 
-int green_detect = 1; // if 1 --> green, 0 --> white     ********************************************************
-int green_temp_array[5]= {2,0,1,1,2};
-char temp_yellow_white[5]={'W','Y','W','Y','Y'};
-int tem_pos=0;
-
+int green_detect = 0; // if 1 --> green, 0 --> white     ********************************************************
 bool check_again = false;
+//int green_temp_array[5]= {2,0,1,1,2};
+//char temp_yellow_white[5]={'W','Y','W','Y','Y'};
+//int tem_pos=0;
+
+// moving out of the grid 
 int Tdetect=0;
-int endline=0;
-
-
-
-
-int Array_size;
-
-// for Line Navigation
-int No_lines = 0;
-int modulus;
-bool Code[20] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-int first_black_line = 0;
 
 void setup() {
   for (int i = 0; i < analogSensorCount; i++) {
@@ -213,20 +190,12 @@ void setup() {
   elbowServo.attach(ELBOW_PIN);
   gripperServo.attach(GRIPPER_PIN);
 
-  leftServo.attach(left_pin);
-  rightServo.attach(right_pin);
-
-
-
   pinMode(13,OUTPUT);
 
   digitalWrite(13,LOW);
+    
 
-  // if (tcs.begin()==false){
-  //   digitalWrite(13,HIGH);
-
-  // }    
-
+  // Initialize TCS34725 color sensor
   pinMode(S0, OUTPUT);
   pinMode(S2, OUTPUT);
   pinMode(S3, OUTPUT);
@@ -244,35 +213,25 @@ void setup() {
 
   Serial.begin(9600);
 
-  
-
   // Set initial positions
   baseServo.write(basePos);         // Base: 0-360°
   shoulderServo.write(shoulderPos); // Others: 0-180°
   elbowServo.write(elbowPos);
   gripperServo.write(gripperPos);
 
-  leftServo.write(ini_left);
-  rightServo.write(ini_right);
-
   calibrateColors();
 
 }
 
 void loop() {
-  // Call the PID function to keep the robot moving straight
-  //moveStraightPID();
 
-  // Add a small delay to control the PID loop frequency
-  //delay(10);
-  //colour_line_follow();
   Task1();
-  //move_for_grabbing(100);
+
 }
 
 void calibrateColors() {
   // Calibrate White
-  Serial.println("Place a WHITE object in front of the sensor and press any key...");
+  //Serial.println("Place a WHITE object in front of the sensor and press any key...");
   digitalWrite(WHITE_LED, HIGH);  // Indicate white calibration
   digitalWrite(YELLOW_LED, LOW);
 
@@ -284,13 +243,6 @@ void calibrateColors() {
   redMinWhite = redFreq - 10; redMaxWhite = redFreq + 10;
   greenMinWhite = greenFreq - 10; greenMaxWhite = greenFreq + 10;
   blueMinWhite = blueFreq - 10; blueMaxWhite = blueFreq + 10;
-
-  Serial.print("White Calibrated - Red: ");
-  Serial.print(redFreq);
-  Serial.print(" Green: ");
-  Serial.print(greenFreq);
-  Serial.print(" Blue: ");
-  Serial.println(blueFreq);
 
   delay(1000);  // Brief pause
 
@@ -308,17 +260,7 @@ void calibrateColors() {
   redMinYellow = redFreq - 10; redMaxYellow = redFreq + 10;
   greenMinYellow = greenFreq - 10; greenMaxYellow = greenFreq + 10;
   blueMinYellow = blueFreq - 10; blueMaxYellow = blueFreq + 10;
-
-  Serial.print("Yellow Calibrated - Red: ");
-  Serial.print(redFreq);
-  Serial.print(" Green: ");
-  Serial.print(greenFreq);
-  Serial.print(" Blue: ");
-  Serial.println(blueFreq);
 }
-
-
-
 
 
 
@@ -334,18 +276,18 @@ void line_follow(int *sensorValues) {
     motor1.stop();
     motor2.stop();
     delay(5);
-    againcheck(sensorValues, count_moveForward);
+    check_juction(count_moveForward);
   } else if (isImmediateTurnR(sensorValues)) {
     motor1.stop();
     motor2.stop();
     delay(5);
-    againcheck(sensorValues, count_moveForward);
+    check_juction(count_moveForward);
   } else if (isImmediateTurnT(sensorValues)) {
     motor1.stop();
     motor2.stop();
     delay(5);
-    againcheck(sensorValues, count_moveForward);
-  } else {
+    check_juction(count_moveForward);
+  } else { 
     float pidValue = calculatePID(sensorValues);
     PID_Linefollow(pidValue);
   }
@@ -368,9 +310,9 @@ float calculatePID(int *sensorValues) {
     error = -previousError;
   } else {
     position /= onLine;
-    error = 0 - position;
+    error = 0 - position;   // desired value is zero(the line is middle respect to the IR array)
   }
-  for (int i = 49; i > 0; i--) {
+  for (int i = 49; i > 0; i--) {        // // /////Shift the error values in the array********************FOR More advanced PID
     errorArray[i] = errorArray[i - 1];
   }
   errorArray[0] = error;
@@ -441,7 +383,7 @@ bool isImmediateTurnT(int *sensorValues) {
   return turnT;
 }
 
-void againcheck(int *sensorValues, int count) {
+void check_juction(int count) {
   encoderCountA = 0;
   encoderCountB = 0;
 
@@ -457,19 +399,19 @@ void againcheck(int *sensorValues, int count) {
     motor1.stop();
     motor2.stop();
     delay(5);
-    moveForward(sensorValues, count);
+    check_juction_second(sensorValues, count);
   } else if (isImmediateTurnR(sensorValues)) {
     junction = "R";
     motor1.stop();
     motor2.stop();
     delay(5);
-    moveForward(sensorValues, count_moveForward);
+    check_juction_second(sensorValues, count);
   } else if (isImmediateTurnT(sensorValues)) {
     junction = "T";
     motor1.stop();
     motor2.stop();
     delay(5);
-    moveForward(sensorValues, count_moveForward);
+    check_juction_second(sensorValues, count);
   } else {
     float pidValue = calculatePID(sensorValues);
     PID_Linefollow(pidValue);
@@ -524,7 +466,7 @@ void backward_B3() {
   delay(1000);
 }
 
-void moveForward(int *sensorValues, int count) {
+void check_juction_second(int *sensorValues, int count) {
   readSensors(sensorValues);
   encoderCountA = 0;
   encoderCountB = 0;
@@ -536,6 +478,7 @@ void moveForward(int *sensorValues, int count) {
   motor2.stop();
   delay(50);
   readSensors(sensorValues);
+  delay(50);
 
   if (junction == "L") {
     if (sensorValues[0] + sensorValues[1] + sensorValues[2] + sensorValues[3] + sensorValues[4] + sensorValues[5] + sensorValues[6] + sensorValues[7] < 2) {
@@ -588,41 +531,10 @@ void turnLeft() {
   motor2.stop();
 }
 
-void turnLeftNew() {
-  encoderCountA = 0;
-  encoderCountB = 0;
-
-  while (encoderCountB < 185 && encoderCountA < 185) {
-    moveTurnLeftPID();
-  }
-  motor1.stop();
-  motor2.stop();
-}
 
 
-// void turnLeft45() {
-//   encoderCountA = 0;
-//   encoderCountB = 0;
 
-//   while (encoderCountB < 95 && encoderCountA < 95) {
-//     moveTurnLeftPID();
-//   }
-//   motor1.stop();
-//   motor2.stop();
-// }
-
-// void turnRight45() {
-//   encoderCountA = 0;
-//   encoderCountB = 0;
-
-//   while (encoderCountB < 95 && encoderCountA < 95) {
-//     moveTurnRightPID();
-//   }
-//   motor1.stop();
-//   motor2.stop();
-// }
-
-void turnRightStart() {
+void task1_start() {
   turnRight();
 
   encoderCountA = 0;
@@ -646,7 +558,7 @@ void encoderISR_B() {
   encoderCountB++;
 }
 
-void colour_line_follow() {
+void line_follow_juction_turns() {
   readSensors(sensorValues);
   line_follow(sensorValues);
 
@@ -661,7 +573,7 @@ void colour_line_follow() {
   } else if (junction == "TP") {
     is_plus = true;
     //delay(1000);
-    //green_detect = Green_White_Detect();      *******************************************************
+    green_detect = Green_White_Detect();      //*******************************************************
     //Serial.println(plus);
 
 
@@ -699,151 +611,8 @@ void moveStraightPID() {
   previousErrorenco = errorenco;
 }
 
-// D53-blue , D51
-String colordetect(){
-  uint16_t r, g, b, c;
-  
-  tcs.getRawData(&r, &g, &b, &c);
-  
-  if (b > r){
-    //digitalWrite(53,HIGH);
-    //digitalWrite(51,LOW);
-    return "Blue" ;
-  } 
-  if (b < r){
-    //digitalWrite(51,HIGH);
-    //digitalWrite(53,LOW);
-    return "Red";
-  }
-  else{
-    return "non";
-  }
-}
-String Blue_Red_NOTdetect(){
-  uint16_t r, g, b, c;
-  
-  tcs.getRawData(&r, &g, &b, &c);
-  Serial.print("red:");
-  Serial.print(r);
-  Serial.print(", blue:");
-  Serial.println(b);
-
-  
-  if ( r> 150 || 45 < b){ //(26<r && 26<b && r<200 && b<200){
-    //digitalWrite(53,HIGH);
-    //digitalWrite(51,LOW);
-    if (r>b){
-      Serial.print("red");
-      return "r";
-    }
-    else{
-      Serial.print("blue");
-      return "b";
-    }
-
-  }
-  else{
-    return "non";
-  }
 
 
-}
-
-
-
-void colordetect1(){
-  uint16_t r, g, b, c;
-  
-  tcs.getRawData(&r, &g, &b, &c);
-  
-  if (b > r){
-    //digitalWrite(53,HIGH);
-    //digitalWrite(51,LOW);
-    //Serial.print("Red    :");     //32---- 37
-    //Serial.print(r);
-    //Serial.print("   Blue    :");    //59--- 64
-    //Serial.println(b);
-  } 
-  if (b < r){
-    //digitalWrite(51,HIGH);
-    //digitalWrite(53,LOW);
-    //Serial.print("Red    :");     //102
-    //Serial.print(r);
-    //Serial.print("   Blue    :");   //50
-    //Serial.println(b);
-  }
-}
-// Black-----> r=20   b=18
-// White-----> r=310  b=360
-
-
-// const int size_1b=2;
-// const String Turn_1b[size_1b]={"TP","TT"};
-// const String Actions_1b[size_1b]={"R","B"};
-// const String LED_1b[size_1b]={"N","S"};
-
-
-// const int size_1r=10;
-// const String Turn_1r[size_1r]={"TP","LL","LT","LT","LT","LT","RT","TT","TP","TT"};
-// const String Actions_1r[size_1r]={"180","L","L","F","F","180","R","R","R","B"};
-// const String LED_1r[size_1r]={"N","N","N","S","N","O","N","N","N","S"};
-
-/*
-void Identify_action(String Action){
-
-  if (Action=="180"){half_rotation();}
-
-  if (Action=="L"){turnLeft();}
-
-  if (Action=="R"){turnRight();}
-
-  if (Action=="B"){
-    backward_B1();
-    while(Blue_Red_NOTdetect()){
-      //colordetect1();
-      encoder_backward();
-    }
-    motor1.stop();
-    motor2.stop();
-    delay(3000);
-    increment_count++;
-    digitalWrite(53,LOW);
-    half_rotation();
-    moveForward(sensorValues,count_moveForward);
-    
-  }
-    if (Action=="FF"){
-    while(Blue_Red_NOTdetect()){
-      //colordetect1();
-      moveStraightPID();
-    }
-    motor1.stop();
-    motor2.stop();
-    delay(3000);
-    digitalWrite(53,LOW);
-    increment_count++;
-
-    
-  }
-
-
-  if (Action=="S"){
-    motor1.stop();
-    motor2.stop();
-    delay(3000);
-    }
-
-  if (Action=="F"){line_follow(sensorValues);}
-
-  if (Action=="B1"){backward_B1();}
-
-  if (Action=="B2"){backward_B2();}
-
-  if (Action=="B3"){backward_B3();}
-
-
-}
-*/
 void half_rotation() {
   // Perform a sharp left turn by 
   // Assuming motor1 is the right motor and motor2 is the left motor
@@ -862,11 +631,7 @@ void half_rotation() {
   }
   motor1.stop();
   motor2.stop();
-  //delay(1000);
-  //Serial.print("Encoder A Count: ");
-  //Serial.println(encoderCountA);
-  //Serial.print("Encoder B Count: ");
-  //Serial.println(encoderCountB);
+
 }
 
 void half_rotation_L() {
@@ -880,33 +645,13 @@ void half_rotation_L() {
 
     moveTurnLeftPID();
   
-    // motor2.setSpeed(120);
-    // motor2.forward();
-    // motor1.setSpeed(120);
-    // motor1.backward();
+
   }
   motor1.stop();
   motor2.stop();
-  //delay(1000);
-  //Serial.print("Encoder A Count: ");
-  //Serial.println(encoderCountA);
-  //Serial.print("Encoder B Count: ");
-  //Serial.println(encoderCountB);
-}
-/*
-bool Identify_Strip(int* sensorValues){
-  readSensors(sensorValues);
-  if ((sensorValues[0]+sensorValues[1]+sensorValues[2]+sensorValues[3]+sensorValues[4]+sensorValues[5]+sensorValues[6]+sensorValues[7])>6){
-    //Serial.println((sensorValues[0]+sensorValues[1]+sensorValues[2]+sensorValues[3]+sensorValues[4]+sensorValues[5]+sensorValues[6]+sensorValues[7]));
-    return 1;     
-    
-  }else{
-    //Serial.println((sensorValues[0]+sensorValues[1]+sensorValues[2]+sensorValues[3]+sensorValues[4]+sensorValues[5]+sensorValues[6]+sensorValues[7]));
-    return 0;
-  }
+
 }
 
-*/
 
 
 
@@ -946,288 +691,8 @@ void encoder_backward(){
 
 }     
 
-//////////////////
 
-/*
-bool Wall_detect(){
-  digitalWrite(trig1, LOW);
 
-  delayMicroseconds(2);
-  digitalWrite(trig1, HIGH);
-  
-  delayMicroseconds(10);
-  digitalWrite(trig1, LOW);
-  
-  long t1 = pulseIn(echo1, HIGH);
-  
-  digitalWrite(trig2, LOW);
-  delayMicroseconds(2);
-  digitalWrite(trig2, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trig2, LOW);
-
-  
-  long t2 = pulseIn(echo2, HIGH);
-
-  long cm1 = t1/29/2;
-  long cm2 = t2/29/2;
-
-  //Serial.print(cm1);
-  //Serial.print("\t");
-  //Serial.print(cm2);
-  //Serial.println();
-
-  // if((2<cm1) && (cm1<70) || (2<cm2) && (cm2<70)){
-  //     digitalWrite(49,HIGH);
-  //     delay(1000);
-  //     digitalWrite(49,LOW);
-  // }
-
-  //delay(100);
-  return ((2<cm1) && (cm1<90) || (2<cm2) && (cm2<90) );
-}
-
-*/
-
-
-
-
-
-
-
-void LED_Switching_Juc(String LEDstate){
-  // S---> Switch On
-  // O---> Switch Off
-  // N---> Nothing
-  if (LEDstate=="S"){
-    // Turn on LED
-    //digitalWrite(53,HIGH);
-  }
-  if (LEDstate=="O"){
-    // Turn Off LED
-    //digitalWrite(53,LOW);
-  }
-}
-
-// const int size_1b=2;
-// const String Turn_1b[size_1b]={"TP","TT"};
-// const String Actions_1b[size_1b]={"R","B"};
-// const String LED_1b[size_1b]={"N","S"};
-
-
-// const int size_1r=10;
-// const String Turn_1r[size_1r]={"TP","LL","LT","LT","LT","LT","RT","TT","TP","TT"};
-// const String Actions_1r[size_1r]={"180","L","L","F","F","180","R","R","R","B"};
-// const String LED_1r[size_1r]={"N","N","N","S","N","O","N","N","N","S"};
-/*
-void find_path(String Turn[], String Actions[]){
-  for (int i=0; i<Array_size; i++){
-    while(true){
-      readSensors(sensorValues);
-      line_follow(sensorValues);
-      //String passed_turn=Turn[i];
-      if (Turn[i]==junction){
-        Identify_action(Actions[i]);
-        junction="a";
-        break;
-      }
-      
-    }
-  }
-}
-
-
-
-void find_path_full_array(String Turn[], String Actions[],String LED[]){
-  for (int i=0; i<Array_size; i++){
-    while(true){
-      readSensors(sensorValues);
-      line_follow(sensorValues);
-      //String passed_turn=Turn[i];
-      if (Turn[i]==junction){
-        LED_Switching_Juc(LED[i]);
-        Identify_action(Actions[i]);
-        junction="a";
-        break;
-      }
-      
-    }
-  }
-}
-*/
-// for check Blue wall open or not
-//bool Check_Blue_Wall(int )        <======== have to find out how Ultra sonic works
-
-String Colour;
-
-String Arranging_order(String Colour) {
-  if (Colour == "Blue") {
-      return "Ascending";
-  } else if (Colour == "Red") {
-      return "Descending";
-  } else {
-      return "Unknown";
-  }
-}
-
-//  Box_Detection function should feed Ultra Sound input
-
-
-/*
-bool Box_Detection(){
-
-  return 0;
-
-}
-
-
-void Box_lift(){}
-
-void Box_drop(){}
-
-
-void Box_Arrange(){
-  Colour="Blue";
-  if (Arranging_order(Colour)="Ascending"){
-    while(true){
-      readSensors(sensorValues);
-      line_follow(sensorValues);
-
-      if (junction=="TP"){
-        turnLeft();
-      }
-      
-      junction="a";
-
-      if (Box_Detection()){
-        motor1.stop();
-        motor2.stop();
-        if  (Hight_Measure()==1){
-          delay(7000);
-          Box_lift();
-          half_rotation();
-
-
-          // box=3, location=A
-          const String Turn_3A[3]={"TP","TP","TP"};
-          const String Action_3A[3]={"L","F","R"};
-
-          //find_path_Box_Arrangement(Turn_3A,Action_3A);
-          Box_drop();
-
-          while(true){
-            readSensors(sensorValues);
-            line_follow(sensorValues);
-
-            if  (junction=="TP"){
-              turnLeft();
-
-              while(true){
-                readSensors(sensorValues);
-                line_follow(sensorValues);
-
-                if  (junction=="TP"){
-                  turnRight();
-
-                }
-
-                if (Box_Detection()){
-                  motor1.stop();
-                  motor2.stop();
-                  if  (Hight_Measure()==1){
-                    delay(7000);
-                    Box_lift();
-                    half_rotation();
-
-                    //const String Turn_1B[2]={"TP","TP"};
-                    //const String Turn_1B[2]={"R","L"};
-
-                    //find_path_Box_Arrangement(Turn_1B,Action_1B);
-                    Box_drop();
-                    while (true){
-                      readSensors(sensorValues);
-                      line_follow(sensorValues);
-                      
-                      junction="a";
-                    }
-          
-        
-                  }
-
-                }
-              junction="a";
-              }
-            }
-
-            junction="a";
-
-          }
-        }
-
-        
-        
-
-      }
-
-
-    
-  }
-
-  }
-  if (Arranging_order(Colour)="Descending"){
-
-
-  }
-}
-
-void Mech_Arm(String Drop){
-
-}
-
-int Hight_Measure(){
-  // there are 3 different angles for hight measurements 
-  bool range1;//1
-  bool range2;//2
-  bool range3;//3
-  if (range1){
-    return 1;
-  }
-    if (range2){
-    return 2;
-  }
-    if (range3){
-    return 3;
-  }
-}
-
-
-//String Box_Arrangement_Turns[];
-
-
-void find_path_Box_Arrangement(String Turn[], String Actions[]){
-
-
-  for (int i=0; i<Array_size; i++){
-    while(true){
-      readSensors(sensorValues);
-      line_follow(sensorValues);
-      //String passed_turn=Turn[i];
-      if (Turn[i]==junction){
-        Identify_action(Actions[i]);
-        break;
-        //Mech_Arm(Drop[i]);
-      }
-      if (junction=="TB"){        // white Box***** DON't INVERT
-        break;
-
-      }
-      junction="a";
-    }
-  }
-
-}
-
-*/
 void moveTurnRightPID() {
   // Calculate the error (difference between encoder counts)
 
@@ -1295,126 +760,21 @@ void moveTurnLeftPID() {
 }
 
 
-
 void Task1(){  
   if(flag== 0){
-    turnRightStart();
+    task1_start();
     flag = 1;
   }
   colomcheck();
 
   while (ball_count==5 && plus==0){
-
-
-
-        //Serial.println("hee");
-        if (endline == 0){
-          colour_line_follow();
-          
-        }
-        
-        if(Tdetect == 1){
-          turnRight();
-    
-          encoderCountA=0;
-          encoderCountB=0;
-          while((encoderCountA < 170) && (encoderCountB < 170)){
-            //delay(5000);
-            readSensors(sensorValues);
-            float pidValue = calculatePID(sensorValues);
-            PID_Linefollow(pidValue);
-          }
-          
-          turnLeftNew();
-    
-    
-          Tdetect = 0;
-          endline = 1;
-    
-        }
-        if (endline == 1){
-          readSensors(sensorValues);
-          while(sensorValues[0] + sensorValues[1] + sensorValues[2] + sensorValues[3] + sensorValues[4] + sensorValues[5] + sensorValues[6] + sensorValues[7] < 2){
-            moveStraightPID();
-            readSensors(sensorValues);
-    
-          }
-          encoderCountA = 0;
-          encoderCountB = 0;
-    
-          while (encoderCountA < 80 && encoderCountB < 80) {
-            moveStraightPID();
-          }
-          motor1.stop();
-          motor2.stop();
-          delay(5);
-          
-    
-          turnLeftNew();
-    
-          encoderCountA = 0;
-          encoderCountB = 0;
-    
-          while (encoderCountA < 80 && encoderCountB < 80) {
-            moveStraightPID();
-          }
-          motor1.stop();
-          motor2.stop();
-          delay(5);
-          delay(5000);
-    
-    
-    
-          // dropping
-          rightServo.write(90);  // Move to 0 degrees
-          delay(1000);       // Wait 1 second
-    
-    
-          encoderCountA = 0;
-          encoderCountB = 0;
-    
-          while (encoderCountA < 180 && encoderCountB < 180) {
-            moveStraightPID();
-          }
-          motor1.stop();
-          motor2.stop();
-          delay(5);
-    
-          turnLeftNew();
-          turnLeftNew();
-    
-          encoderCountA = 0;
-          encoderCountB = 0;
-    
-          while (encoderCountA < 700 && encoderCountB < 700) {
-            moveStraightPID();
-          }
-          motor1.stop();
-          motor2.stop();
-          delay(5); 
-          leftServo.write(90); // Move to 90 degrees
-          delay(1000);  
-          while(true){
-            motor1.stop();
-            motor2.stop();
-            delay(5); 
-          }     
-          
-    
-        }
-
-
-
-
-
-
-  }  
-    /*motor1.stop();
+    motor1.stop();
     motor2.stop();
-    delay(1000);*/
+    delay(1000);
+  }
+}  
 
-}
-  
+ 
 int Green_White_Detect(){
   uint16_t r, g, b, c;
   
@@ -1432,6 +792,7 @@ int Green_White_Detect(){
   }
 }
 
+// Function to read color frequencies from TCS3200
 void readColors() {
   unsigned long redSum = 0, greenSum = 0, blueSum = 0;
   const int samples = 5;  // Average over 5 readings
@@ -1472,7 +833,6 @@ String ball_colour(){
   }
 }
 
-  
 void move_for_grabbing(){
   encoderCountA=0;
   encoderCountB=0;
@@ -1519,8 +879,6 @@ void move_for_grabbing(){
   delay(500);
   smoothMoveServo(gripperServo,gripperPos,0);
 
-
-
   //grabing code
   delay(500);
 
@@ -1537,7 +895,7 @@ void move_for_grabbing(){
 
   ball_count++;
 
-  tem_pos++;
+  //tem_pos++;        *************************
   
 }
 
@@ -1566,12 +924,9 @@ void smoothMoveServo(Servo &servo, int &currentPos, int targetPos) {
   servo.write(currentPos);
 }
 
-// void Grab
-
-
 void colomcheck(){
-  colour_line_follow();
-  if(is_plus ==true && plus == 0 && green_temp_array[tem_pos]==0) { //green_detect == 1  ){
+  line_follow_juction_turns();
+  if(is_plus ==true && plus == 0 && green_detect == 1  ){ //green_temp_array[tem_pos]==0) { 
     //turnRight45();
     turnRight();
     move_for_grabbing();
@@ -1580,48 +935,39 @@ void colomcheck(){
     plus = 0;
     is_plus =false;
   }
-  else if (is_plus ==true  && plus == 0 && green_temp_array[tem_pos]!=0){ //&& green_detect == 0
+  else if (is_plus ==true  && plus == 0 && green_detect == 0) {//green_temp_array[tem_pos]!=0){ 
     delay(500);
     turnRight();
     plus+=1;
     is_plus =false;
     
   }
-  else if (is_plus ==true  && plus == 1 && green_temp_array[tem_pos]==1){ //&& green_detect == 1
+  else if (is_plus ==true  && plus == 1 && green_detect == 1){  //green_temp_array[tem_pos]==1){ 
     //turnLeft45();
     move_for_grabbing();
     
-    // graping code
-    //turnLeft45();
-    //turnLeft();
     half_rotation_L();
     plus = 4;
     is_plus =false;     
   }
-  else if (is_plus ==true  && plus == 1 && green_temp_array[tem_pos]!=1){ //&& green_detect == 0
+  else if (is_plus ==true  && plus == 1 && green_detect == 0){ // green_temp_array[tem_pos]!=1){ 
     //turnRight();
     delay(500);
     plus+=1;
     is_plus =false;    
   }
-  else if (is_plus ==true  && plus == 2 && green_temp_array[tem_pos]==2){ //&& green_detect == 1
+  else if (is_plus ==true  && plus == 2 && green_detect == 1){ // green_temp_array[tem_pos]==2){ 
     //turnLeft45();
     move_for_grabbing();
-    
-    // graping code
-    //turnLeft45();
-    //turnLeft();
+
     half_rotation_L();
     plus = 3;
     is_plus =false;     
   }
-  else if (is_plus ==true  && plus == 2 && green_temp_array[tem_pos]!=2){ //&& green_detect == 0
+  else if (is_plus ==true  && plus == 2 && green_detect == 0){ //green_temp_array[tem_pos]!=2){
     delay(500);
     half_rotation();
-    
-
     check_again = true;
-
     plus = 3;
     is_plus =false;     
   }
