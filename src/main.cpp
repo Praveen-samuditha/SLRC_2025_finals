@@ -23,8 +23,41 @@ Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS3472
 #define S2 26  // Filter select
 #define S3 29  // Filter select
 #define OUT 28 // Frequency output
-#define YELLOW_LED 30  // Yellow LED indicator
-#define WHITE_LED 31   // White LED indicator
+
+// TCS3200 (HW-067) required pin definitions for Ball detect
+#define S0_b 44  // Frequency scaling
+#define S2_b 43  // Filter select
+#define S3_b 46  // Filter select
+#define OUT_b 47 // Frequency output
+
+
+#define YELLOW_LED 41  // Yellow LED indicator
+#define WHITE_LED 43   // White LED indicator
+#define RED_LED 40
+#define ORANGE_LED 42
+
+#define R_trig 30
+#define R_echo 31
+#define L_trig 35 // finalized
+#define L_echo 34 // finalized
+#define F_trig 32
+#define F_echo 33
+
+// For wall  follow
+#define DESIRED_DISTANCE 15  // Target wall distance in cm
+// PID constants
+float Kp_w = 8;
+float Ki_w = 0.0;
+float Kd_w = 4;
+
+float error_w = 0, previousError_w = 0;
+float P_w = 0, I_w = 0, D_w = 0;
+float errorArray_w[2];  // For advanced PID
+float lfspeed_w = 120;   // Base speed
+float lsp_w, rsp_w;
+
+
+
 
 unsigned long redMinWhite, redMaxWhite, greenMinWhite, greenMaxWhite, blueMinWhite, blueMaxWhite;
 unsigned long redMinYellow, redMaxYellow, greenMinYellow, greenMaxYellow, blueMinYellow, blueMaxYellow;
@@ -40,9 +73,11 @@ Servo gripperServo;  // Gripper (0-180°)
 
 // Pin definitions
 const int BASE_PIN = 7;
-const int SHOULDER_PIN = 11;
-const int ELBOW_PIN = 8;
+const int SHOULDER_PIN = 8;
+const int ELBOW_PIN = 6;
 const int GRIPPER_PIN = 9;
+const int RIGHT_PIN = 10;
+const int LEFT_PIN = 11;
 
 
 // Variables to store servo positions
@@ -77,49 +112,73 @@ float error;
 // PID variables
 float P, I, D, previousError = 0;
 float lsp, rsp;
-int lfspeed = 200;
+int lfspeed = 100;
 
 String junction = "a";
 
 // Function prototypes
 void readSensors(int *values);
-float calculatePID(int *sensorValues);
-void motor_drive(int left, int right);
-void turnLeft();
-void turnRight();
-void noLine();
-String colordetect();
+
 void Task1();
-void moveStraightPID();
-void moveTurnRightPID();
-void moveTurnLeftPID();
-void check_juction( int count);
-void backward_B1();
-void backward_B2();
-void backward_B3();
-void small_backward();
-void check_juction_second(int *sensorValues, int count);
+void Task2();
+void Task3();
+void Task4();
+void Task5(); // Hidden
+void Task6();
+
+void moveStraightPID(); // use with a while loop terminating with encoderCountA or B
+void encoder_backward();  //use with a while loop terminating with encoderCountA or B
+void moveTurnRightPID();  // use with a while loop terminating with encoderCountA or B
+void moveTurnLeftPID(); // use with a while loop terminating with encoderCountA or B
+
+void Go_straight_Normal_line();   // can go straight and correct using perpendicular lines
+
+void turnLeft();  //can use
+void turnRight(); //can use
+void half_rotation(); // clockwise
+void half_rotation_L(); // counter clockwise
+void forward_encoder(int count); 
+void backward_encoder(int count); 
+
+
 void encoderISR_A();
 void encoderISR_B();
-void line_follow_juction_turns();
-void line_follow(int *sensorValues);
+
+void line_follow_juction_turns(); // can use anywhere // able to take decision at junctions
+void line_follow(int *sensorValues);  // make a function like line_follow_juction_turns()
+
+void check_juction( int count);
+void check_juction_second(int *sensorValues, int count);
 bool isImmediateTurnL(int *sensorValues);
 bool isImmediateTurnR(int *sensorValues);
 bool isImmediateTurnT(int *sensorValues);
-void encoder_backward();
-int Green_White_Detect();
-void colomcheck();
+
+int Green_White_Detect(); // Detect Green and White balls (green--> 1, white --> 0)
+void colomcheck();  // for task 1 check for the ball
+void colomcheck2();
 void move_for_grabbing(int count);
 //void turnRight45();
 //void turnLeft45();
 void task1_start();
-void half_rotation();
-void PID_Linefollow(float pidValue);
+
+float calculatePID(int *sensorValues);
+void motor_drive(int left, int right);
+void PID_Linefollow(float pidValue);        //use with calculatePID
+void PID_Linefollow_Normal(float pidValue);   // Adjest Normal to the line //use with calculatePID
+
 void smoothMoveServo(Servo &servo, int &currentPos, int targetPos);
-String ball_colour();
-void calibrateColors();
+String ball_colour(); 
+void calibrateColors();   // only with white and yellow balls********************************** Have to calibrate others
 void readColors();
-void turnLeftNew();
+
+float measureDistance(int trigPin, int echoPin);
+void wall_follow(float pidValue);
+float calculatePID_wall();
+
+// while(true){
+//   float pidvalue= calculatePID_wall();
+//   wall_follow(pidvalue);
+// }
 
 L298N motor1(PWMA, AIN1, AIN2);
 L298N motor2(PWMB, BIN1, BIN2);
@@ -130,21 +189,23 @@ L298N motor2(PWMB, BIN1, BIN2);
 // Encoder counts
 volatile long encoderCountA = 0; // Encoder count for Motor A
 volatile long encoderCountB = 0; // Encoder count for Motor B
-const long targetCounts = 190;   // 185       // Desired encoder counts for 90 degree turns
-const long targetCounts_rotation = 360; // Desired encoder counts for 180 degree turns
-const int count_moveForward = 85;
+const long targetCounts = 150;   // 185       // Desired encoder counts for 90 degree turns
+const long targetCounts_rotation = 300; // Desired encoder counts for 180 degree turns
+const int count_moveForward = 55;
 const int count_moveForward_w = 125;
 
 // PID parameters for encoders
+float Kp_e = 5; // Proportional term
+float Ki_e = 0; // Integral term
+float Kd_e = 5; // Derivative term
 float errorenco = 0;
 float previousErrorenco = 0;
 float integralenco = 0;
 float derivativeenco = 0;
 
 // Target speed for motors
-int baseSpeed = 200; // Base speed for both motors (0 to 255)///////// for Line Navigation 115
+int baseSpeed = 100; // Base speed for both motors (0 to 255)///////// for Line Navigation 115
 
-int flag = 0;
 int plus = 0;
 bool is_plus=false;
 
@@ -170,7 +231,7 @@ void setup() {
   pinMode(PWMB, OUTPUT);
   pinMode(BIN1, OUTPUT);
   pinMode(BIN2, OUTPUT);
-  pinMode(53, OUTPUT); // led indicate in virtual box
+  //pinMode(53, OUTPUT); // led indicate in virtual box
 
   // Encoder pins setup
   pinMode(ENCODER_A1, INPUT_PULLUP);
@@ -180,7 +241,13 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENCODER_A1), encoderISR_A, RISING);
   attachInterrupt(digitalPinToInterrupt(ENCODER_B1), encoderISR_B, RISING);
 
-  // give pinmode to defined leds
+  // set sonnar pins HC-SR04
+  pinMode(L_trig, OUTPUT);   // Set trig pin as output
+  pinMode(L_echo, INPUT);    // Set echo pin as input
+  pinMode(R_trig, OUTPUT);   // Set trig pin as output
+  pinMode(R_echo, INPUT);    // Set echo pin as input
+  pinMode(F_trig, OUTPUT);   // Set trig pin as output
+  pinMode(F_echo, INPUT);    // Set echo pin as input
 
   // give initial values to servo motors
 
@@ -190,10 +257,6 @@ void setup() {
   elbowServo.attach(ELBOW_PIN);
   gripperServo.attach(GRIPPER_PIN);
 
-  pinMode(13,OUTPUT);
-
-  digitalWrite(13,LOW);
-    
 
   // Initialize TCS34725 color sensor
   pinMode(S0, OUTPUT);
@@ -204,12 +267,16 @@ void setup() {
   // Set pin modes for LEDs
   pinMode(YELLOW_LED, OUTPUT);
   pinMode(WHITE_LED, OUTPUT);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(ORANGE_LED, OUTPUT);
 
   // Initial state: LEDs off
   digitalWrite(YELLOW_LED, LOW);
   digitalWrite(WHITE_LED, LOW);
+  pinMode(RED_LED, LOW);
+  pinMode(ORANGE_LED, LOW);
 
-  digitalWrite(S0, HIGH); // LOW to HIGHT
+  digitalWrite(S0, HIGH); // LOW to HIGH
 
   Serial.begin(9600);
 
@@ -219,14 +286,35 @@ void setup() {
   elbowServo.write(elbowPos);
   gripperServo.write(gripperPos);
 
-  calibrateColors();
+  //calibrateColors(); // Only for White and Yellow balls
 
 }
 
 void loop() {
-
   Task1();
+  //line_follow_juction_turns();
+  //readSensors(sensorValues);
+  //check_juction(count_moveForward);
 
+}
+
+void Go_straight_Normal_line(){
+  while (true){
+    readSensors(sensorValues);
+    bool Is_black = (sensorValues[0] == 0 && sensorValues[1] == 0 && sensorValues[2] == 0 && sensorValues[3] == 0 && sensorValues[4] == 0 && sensorValues[5] == 0 && sensorValues[6] == 0 && sensorValues[7] == 0);
+
+
+  if(Is_black){
+
+    forward_encoder(50);
+
+  }else{
+    float pidValue = calculatePID(sensorValues);
+    PID_Linefollow_Normal(pidValue);
+
+  }
+  }
+  
 }
 
 void calibrateColors() {
@@ -263,12 +351,15 @@ void calibrateColors() {
 }
 
 
-
+// Have to calibrate this with the arena
 void readSensors(int *values) {
   // Read analog sensors
   for (int i = 0; i < analogSensorCount; i++) {
     values[i] = analogRead(analogSensorPins[i]) > 80 ? 0 : 1; // Assuming higher values indicate no line (sensor readings > 135) black ====> return 0 (no line)
+    //Serial.print(values[i]);
+    //Serial.print("\t");
   }
+  Serial.println();
 }
 
 void line_follow(int *sensorValues) {
@@ -337,7 +428,7 @@ void motor_drive(float left, float right) {
       motor2.setSpeed(absLeft);
       motor2.backward();
     }
-  
+
     if (right > 0) {
       motor1.setSpeed(absRight);
       motor1.forward();
@@ -350,6 +441,25 @@ void motor_drive(float left, float right) {
 void PID_Linefollow(float pidValue) {
   lsp = lfspeed - pidValue;
   rsp = lfspeed + pidValue;
+
+  if (lsp > 255) {
+    lsp = 255;
+  }
+  if (lsp < -255) {
+    lsp = -255;
+  }
+  if (rsp > 255) {
+    rsp = 255;
+  }
+  if (rsp < -255) {
+    rsp = 255;
+  }
+  motor_drive(lsp, rsp);
+}
+
+void PID_Linefollow_Normal(float pidValue) {
+  lsp = 120 + pidValue;
+  rsp = 120 - pidValue;
 
   if (lsp > 255) {
     lsp = 255;
@@ -384,12 +494,9 @@ bool isImmediateTurnT(int *sensorValues) {
 }
 
 void check_juction(int count) {
-  encoderCountA = 0;
-  encoderCountB = 0;
 
-  while (encoderCountA < 15 && encoderCountB < 15) {
-    moveStraightPID();
-  }
+  forward_encoder(15);
+
   motor1.stop();
   motor2.stop();
   delay(5);
@@ -418,11 +525,23 @@ void check_juction(int count) {
   }
 }
 
-void backward_B1() {
+void forward_encoder(int count) {
   encoderCountA = 0;
   encoderCountB = 0;
 
-  while (encoderCountA < 450 && encoderCountB < 450) {
+  while (encoderCountA < count && encoderCountB < count) {
+    moveStraightPID();
+  }
+  motor1.stop();
+  motor2.stop();
+  delay(1000);
+}
+
+void backward_encoder(int count) {
+  encoderCountA = 0;
+  encoderCountB = 0;
+
+  while (encoderCountA < count && encoderCountB < count) {
     encoder_backward();
   }
   motor1.stop();
@@ -430,41 +549,6 @@ void backward_B1() {
   delay(1000);
 }
 
-void backward_B2() {
-  encoderCountA = 0;
-  encoderCountB = 0;
-
-  while (encoderCountA < 765 && encoderCountB < 765) {
-    encoder_backward();
-  }
-  motor1.stop();
-  motor2.stop();
-  delay(1000);
-}
-
-void small_backward() {
-  encoderCountA = 0;
-  encoderCountB = 0;
-
-  while (encoderCountA < 170 && encoderCountB < 170) {
-    encoder_backward();
-  }
-  motor1.stop();
-  motor2.stop();
-  delay(1000);
-}
-
-void backward_B3() {
-  encoderCountA = 0;
-  encoderCountB = 0;
-
-  while (encoderCountA < 1090 && encoderCountB < 1090) {
-    encoder_backward();
-  }
-  motor1.stop();
-  motor2.stop();
-  delay(1000);
-}
 
 void check_juction_second(int *sensorValues, int count) {
   readSensors(sensorValues);
@@ -507,6 +591,7 @@ void check_juction_second(int *sensorValues, int count) {
       junction = "TP";
     }
   }
+  Serial.println(junction);
 }
 
 void turnRight() {
@@ -532,17 +617,10 @@ void turnLeft() {
 }
 
 
-
-
 void task1_start() {
   turnRight();
 
-  encoderCountA = 0;
-  encoderCountB = 0;
-
-  while (encoderCountA < 150 && encoderCountB < 150) {
-    moveStraightPID();
-  }
+  forward_encoder(150);
   motor1.stop();
   motor2.stop();
   delay(5);
@@ -565,15 +643,35 @@ void line_follow_juction_turns() {
   if (junction == "LL") {
     turnLeft();
   } else if (junction == "LT") {
-    line_follow(sensorValues);
+
+    is_plus = true;
+
+    //green_detect = Green_White_Detect();
+
   } else if (junction == "RR") {
     turnRight();
   } else if (junction == "RT") {
-    line_follow(sensorValues);
+    //line_follow(sensorValues);
+    is_plus = true;
+
+    //green_detect = Green_White_Detect();
+
   } else if (junction == "TP") {
     is_plus = true;
-    //delay(1000);
-    green_detect = Green_White_Detect();      //*******************************************************
+    //green_detect = Green_White_Detect();
+
+  
+
+    //green_detect = Green_White_Detect();
+    // if (plus==0){
+    //   green_detect = Green_White_Detect();
+    // }
+    // else if (plus==1 or plus==2){
+    //   turnLeft();
+    //   green_detect = Green_White_Detect();
+    //   turnRight();
+    // }
+          //*******************************************************
     //Serial.println(plus);
 
 
@@ -595,7 +693,7 @@ void moveStraightPID() {
   integralenco += errorenco;
   derivativeenco = errorenco - previousErrorenco;
 
-  float correction = (Kp * errorenco) + (Ki * integralenco) + (Kd * derivativeenco);
+  float correction = (Kp_e * errorenco) + (Ki_e * integralenco) + (Kd_e * derivativeenco);
 
   int motor1Speed = baseSpeed - correction;
   int motor2Speed = baseSpeed + correction;
@@ -655,8 +753,6 @@ void half_rotation_L() {
 
 
 
-
-// Robo should go backward until the box should increment the increment count and go to next task
 void encoder_backward(){
 
     // Calculate the error (difference between encoder counts)
@@ -669,7 +765,7 @@ void encoder_backward(){
   derivativeenco = errorenco - previousErrorenco;
 
   // Compute the PID correction
-  float correction = (Kp * errorenco) + (Ki * integralenco) + (Kd * derivativeenco);
+  float correction = (Kp_e * errorenco) + (Ki_e * integralenco) + (Kd_e * derivativeenco);
 
   // Adjust motor speeds based on the correction
   int motor1Speed = baseSpeed - correction;  // Motor A
@@ -704,11 +800,11 @@ void moveTurnRightPID() {
   derivativeenco = errorenco - previousErrorenco;
 
   // Compute the PID correction
-  float correction = (Kp * errorenco) + (Ki * integralenco) + (Kd * derivativeenco);
+  float correction = (Kp_e * errorenco) + (Ki_e * integralenco) + (Kd_e * derivativeenco);
 
   // Adjust motor speeds based on the correction
-  int motor1Speed = baseSpeed - correction;  // Motor A
-  int motor2Speed = baseSpeed + correction;  // Motor B
+  int motor1Speed = 130 - correction;  // Motor A
+  int motor2Speed = 130 + correction;  // Motor B
 
   // Constrain the motor speeds to valid PWM values (0 to 255)
   motor1Speed = constrain(motor1Speed, 0, 255);
@@ -737,11 +833,11 @@ void moveTurnLeftPID() {
   derivativeenco = errorenco - previousErrorenco;
 
   // Compute the PID correction
-  float correction = (Kp * errorenco) + (Ki * integralenco) + (Kd * derivativeenco);
+  float correction = (Kp_e * errorenco) + (Ki_e * integralenco) + (Kd_e * derivativeenco);
 
   // Adjust motor speeds based on the correction
-  int motor1Speed = baseSpeed - correction;  // Motor A
-  int motor2Speed = baseSpeed + correction;  // Motor B
+  int motor1Speed = 130 - correction;  // Motor A
+  int motor2Speed = 130 + correction;  // Motor B
 
   // Constrain the motor speeds to valid PWM values (0 to 255)
   motor1Speed = constrain(motor1Speed, 0, 255);
@@ -761,36 +857,97 @@ void moveTurnLeftPID() {
 
 
 void Task1(){  
-  if(flag== 0){
-    task1_start();
-    flag = 1;
-  }
-  colomcheck();
+  task1_start();
 
-  while (ball_count==5 && plus==0){
+  while(true){
+    colomcheck();
+    if (ball_count==5 && plus==0){
+      motor1.stop();
+      motor2.stop();
+      delay(1000);
+        // readSensors(sensorValues);
+        // line_follow(sensorValues);
+
+        // if (junction=="TT"){
+        //   motor1.stop();
+        //   motor2.stop();
+        //   delay(6000);
+        // }
+      turnLeft();
+      forward_encoder(180);
+
+      turnRight();
+      forward_encoder(370);
+
+      break;
+    }
+  }
+  Task2();
+}  
+
+
+
+
+void Task2(){
+  while(true){
+  
+  }
+  Task3();
+}
+
+void Task3(){
+  while(true){
     motor1.stop();
     motor2.stop();
     delay(1000);
   }
-}  
-
- 
-int Green_White_Detect(){
-  uint16_t r, g, b, c;
-  
-  tcs.getRawData(&r, &g, &b, &c);
-  //Serial.println(g);
-  if (35<g && g<230){ // then green
-    //digitalWrite(53,HIGH);
-    //digitalWrite(51,LOW);
-    //digitalWrite(13, HIGH);
-    return 1 ;
-  } 
-  else{// white
-    //digitalWrite(13, LOW);
-    return 0;
-  }
+  Task4();
 }
+
+void Task4(){
+  while(true){
+    motor1.stop();
+    motor2.stop();
+    delay(1000);
+  }
+  Task5();
+}
+
+
+void Task5(){
+  while(true){
+    motor1.stop();
+    motor2.stop();
+    delay(1000);
+  }
+  Task6();
+}
+
+void Task6(){
+  while(true){
+    motor1.stop();
+    motor2.stop();
+    delay(1000);
+  }
+
+}
+ 
+// int Green_White_Detect(){
+//   uint16_t r, g, b, c;
+  
+//   tcs.getRawData(&r, &g, &b, &c);
+//   //Serial.println(g);
+//   if (35<g && g<230){ // then green
+//     //digitalWrite(53,HIGH);
+//     //digitalWrite(51,LOW);
+//     //digitalWrite(13, HIGH);
+//     return 1 ;
+//   } 
+//   else{// white
+//     //digitalWrite(13, LOW);
+//     return 0;
+//   }
+// }
 
 // Function to read color frequencies from TCS3200
 void readColors() {
@@ -831,6 +988,43 @@ String ball_colour(){
     return "White";
 
   }
+}
+
+int Green_White_Detect(){
+  encoderCountA=0;
+  encoderCountB=0;
+  while((encoderCountA < 30) && (encoderCountB < 30)){
+    //delay(5000);
+    readSensors(sensorValues);
+    float pidValue = calculatePID(sensorValues);
+    PID_Linefollow(pidValue);
+    //moveStraightPID();
+  }
+  motor1.stop();
+  motor2.stop();
+  delay(1000);
+  readColors();
+
+  encoderCountA=0;
+  encoderCountB=0;
+  while((encoderCountA < 25) && (encoderCountB < 25)){
+    //delay(5000);
+    encoder_backward();
+  }
+  motor1.stop();
+  motor2.stop();
+  delay(1000);
+  if (redFreq>10 && blueFreq>10){
+    //Serial.println("Yellow");
+    return 1;
+  }
+  else {
+    //Serial.println("White");
+    return 0;
+  }
+
+  
+  
 }
 
 void move_for_grabbing(){
@@ -924,27 +1118,252 @@ void smoothMoveServo(Servo &servo, int &currentPos, int targetPos) {
   servo.write(currentPos);
 }
 
+// void colomcheck(){
+//   line_follow_juction_turns();
+//   if(is_plus ==true && plus == 0 && green_detect == 1  ){ //green_temp_array[tem_pos]==0) { 
+//     //turnRight45();
+//     turnRight();
+//     //move_for_grabbing();
+//     ball_count++;
+//     delay(2000);
+//     turnLeft();
+//     //turnLeft45();
+//     plus = 0;
+//     is_plus =false;
+//   }
+//   else if (is_plus ==true  && plus == 0 && green_detect == 0) {//green_temp_array[tem_pos]!=0){ 
+//     delay(500);
+//     turnRight();
+//     plus+=1;
+//     is_plus =false;
+    
+//   }
+//   else if (is_plus ==true  && plus == 1 && green_detect == 1){  //green_temp_array[tem_pos]==1){ 
+//     //turnLeft45();
+//     //move_for_grabbing();
+//     ball_count++;
+//     delay(2000);
+//     half_rotation_L();
+//     plus = 2;
+//     is_plus =false;     
+//   }
+//   else if (is_plus ==true  && plus == 1 && green_detect == 0){ // green_temp_array[tem_pos]!=1){ 
+//     //turnRight();
+//     delay(500);
+//     plus=2;
+//     is_plus =false;
+//     //check_again = true; 
+//     //half_rotation(); 
+//     turnLeft();
+//     delay(2000);
+//     //move_for_grabbing();
+//     ball_count++;
+//     turnLeft(); 
+//   }
+//   // else if (is_plus ==true  && plus == 2 && green_detect == 1){ // green_temp_array[tem_pos]==2){ 
+//   //   //turnLeft45();
+//   //   //move_for_grabbing();
+
+//   //   half_rotation_L();
+//   //   plus = 3;
+//   //   is_plus =false;     
+//   // }
+//   // else if (is_plus ==true  && plus == 2 && green_detect == 0){ //green_temp_array[tem_pos]!=2){
+//   //   delay(500);
+//   //   half_rotation();
+//   //   check_again = true;
+//   //   plus = 3;
+//   //   is_plus =false;     
+//   // }
+//   // else if (is_plus ==true && plus == 2){
+//   //   delay(500);
+//   //   plus=3;
+//   //   is_plus =false;    
+//   // }
+//   else if (is_plus ==true && plus==2){
+//     delay(500);
+//     turnRight();
+    
+//     // if (check_again == true){
+//     //   small_backward();
+//     //   check_again = false;
+//     //   half_rotation();
+//     // }
+//     plus=0;
+//     is_plus=false;
+//   }
+  
+
+// }
+
+
 void colomcheck(){
+  line_follow_juction_turns();
+  if(is_plus ==true && plus == 0 ){ //green_temp_array[tem_pos]==0) { 
+    //delay(500);
+    green_detect= Green_White_Detect();
+    if (green_detect == 1){
+      //turnRight45();
+      turnRight();
+      //move_for_grabbing();
+      ball_count++;   //change
+      delay(2000);
+
+      turnLeft();
+      //turnLeft45();
+      plus = 0;
+    }
+    else {
+      delay(500);
+      turnRight();
+      plus+=1;
+    }
+    is_plus =false;
+
+  }
+  if (is_plus ==true  && plus == 1){  //green_temp_array[tem_pos]==1){ 
+    turnLeft();
+    green_detect= Green_White_Detect();
+    if (green_detect == 1){
+      //turnRight45();
+      turnRight();
+      //move_for_grabbing();
+      ball_count++;
+      delay(2000);
+    
+      //turnLeft();
+      half_rotation_L();
+      plus = 4;
+    }
+    else{
+      delay(500);
+      //turnRight();
+      turnRight();
+      plus+=1;
+    }
+    is_plus =false;
+    
+  }
+  if (is_plus ==true  && plus == 2){  //green_temp_array[tem_pos]==1){ 
+    motor1.stop();
+    motor2.stop();
+    delay(500);
+    turnLeft();
+    green_detect= Green_White_Detect();
+    if (green_detect == 1){
+      turnRight();
+      //turnLeft45();
+      //move_for_grabbing();
+      ball_count++;
+      delay(2000);
+
+      half_rotation_L();
+      plus = 3;   
+    }
+    else{
+      delay(500);
+      turnRight();
+      half_rotation();
+      check_again = true;
+      plus = 3;   
+    }
+    delay(500);
+    is_plus =false;
+
+     
+  }
+  if (is_plus ==true && plus == 3){
+    delay(500);
+    plus=4;
+    is_plus =false;    
+  }
+  if (is_plus ==true && plus==4){
+    delay(500);
+    turnRight();
+    
+    if (check_again == true){
+      backward_encoder(150);
+      check_again = false;
+    }
+    plus=0;
+    is_plus=false;
+  }
+  
+}
+
+float measureDistance(int trigPin, int echoPin) {
+  long duration;
+  float distance;
+
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  duration = pulseIn(echoPin, HIGH); // Timeout after 20ms
+  distance = duration * 0.034 / 2.0;
+  //Serial.println(distance);
+  /*if (distanceCm == 0 || distanceCm > 100) {
+    distanceCm = DESIRED_DISTANCE;  // Assume default if out of range
+  }
+  Serial.println(distanceCm);*/
+  return distance;
+}
+
+void wall_follow(float pidValue){
+  lsp_w=lfspeed_w-pidValue;
+  rsp_w=lfspeed_w+pidValue;
+
+  lsp_w=constrain(lsp_w,-200,200);
+  rsp_w=constrain(rsp_w,-200,200);
+
+  motor_drive(lsp_w,rsp_w);
+
+}
+
+float calculatePID_wall() {
+  float distance = measureDistance(L_trig,L_echo);
+  distance=constrain(distance, 3, 20);
+  Serial.println(distance);
+  error_w = DESIRED_DISTANCE - distance;
+  //Serial.println(error);
+
+  for (int i = 2; i > 0; i--) {
+    errorArray_w[i] = errorArray_w[i - 1];
+  }
+  errorArray_w[0] = error_w;
+
+  P_w = error_w;
+  I_w += error_w;
+  D_w = error_w - previousError_w;
+  previousError_w= error_w;
+
+  float pidValue = (Kp_w * P_w) + (Ki_w * I_w) + (Kd_w * D_w);
+  return pidValue;
+}
+
+void colomcheck2(){
   line_follow_juction_turns();
   if(is_plus ==true && plus == 0 && green_detect == 1  ){ //green_temp_array[tem_pos]==0) { 
     //turnRight45();
-    turnRight();
-    move_for_grabbing();
-    turnLeft();
+    //turnRight();
+    //move_for_grabbing();
+    //turnLeft();
     //turnLeft45();
     plus = 0;
     is_plus =false;
   }
   else if (is_plus ==true  && plus == 0 && green_detect == 0) {//green_temp_array[tem_pos]!=0){ 
     delay(500);
-    turnRight();
+    //turnRight();
     plus+=1;
     is_plus =false;
     
   }
   else if (is_plus ==true  && plus == 1 && green_detect == 1){  //green_temp_array[tem_pos]==1){ 
     //turnLeft45();
-    move_for_grabbing();
+    //move_for_grabbing();
     
     half_rotation_L();
     plus = 4;
@@ -958,7 +1377,7 @@ void colomcheck(){
   }
   else if (is_plus ==true  && plus == 2 && green_detect == 1){ // green_temp_array[tem_pos]==2){ 
     //turnLeft45();
-    move_for_grabbing();
+    //move_for_grabbing();
 
     half_rotation_L();
     plus = 3;
@@ -981,7 +1400,7 @@ void colomcheck(){
     turnRight();
     
     if (check_again == true){
-      small_backward();
+      backward_encoder(150);
       check_again = false;
     }
     plus=0;
@@ -990,5 +1409,3 @@ void colomcheck(){
   
 
 }
-
-
