@@ -135,6 +135,9 @@ void Go_straight_Normal_line();   // can go straight and correct using perpendic
 
 void turnLeft();  //can use
 void turnRight(); //can use
+void turnLeft45();  //can use
+void turnRight45(); //can use
+
 void half_rotation(); // clockwise
 void half_rotation_L(); // counter clockwise
 void forward_encoder(int count); 
@@ -204,7 +207,7 @@ float integralenco = 0;
 float derivativeenco = 0;
 
 // Target speed for motors
-int baseSpeed = 100; // Base speed for both motors (0 to 255)///////// for Line Navigation 115
+int baseSpeed = 110; // Base speed for both motors (0 to 255)///////// for Line Navigation 115
 
 int plus = 0;
 bool is_plus=false;
@@ -605,6 +608,17 @@ void turnRight() {
   motor2.stop();
 }
 
+void turnRight45() {
+  encoderCountA = 0;
+  encoderCountB = 0;
+
+  while (encoderCountA < (targetCounts/2) && encoderCountB < (targetCounts/2)) {
+    moveTurnRightPID();
+  }
+  motor1.stop();
+  motor2.stop();
+}
+
 void turnLeft() {
   encoderCountA = 0;
   encoderCountB = 0;
@@ -616,6 +630,16 @@ void turnLeft() {
   motor2.stop();
 }
 
+void turnLeft45() {
+  encoderCountA = 0;
+  encoderCountB = 0;
+
+  while (encoderCountB < (targetCounts/2) && encoderCountA < (targetCounts/2)) {
+    moveTurnLeftPID();
+  }
+  motor1.stop();
+  motor2.stop();
+}
 
 void task1_start() {
   turnRight();
@@ -874,10 +898,10 @@ void Task1(){
         //   delay(6000);
         // }
       turnLeft();
-      forward_encoder(180);
+      forward_encoder(160);
 
       turnRight();
-      forward_encoder(370);
+      forward_encoder(350);
 
       break;
     }
@@ -1028,17 +1052,17 @@ int Green_White_Detect(){
 }
 
 void move_for_grabbing(){
-  encoderCountA=0;
-  encoderCountB=0;
-  while((encoderCountA < 65) && (encoderCountB < 65)){
-    //delay(5000);
-    readSensors(sensorValues);
-    float pidValue = calculatePID(sensorValues);
-    PID_Linefollow(pidValue);
-  }
+  // encoderCountA=0;
+  // encoderCountB=0;
+  // while((encoderCountA < 65) && (encoderCountB < 65)){
+  //   //delay(5000);
+  //   readSensors(sensorValues);
+  //   float pidValue = calculatePID(sensorValues);
+  //   PID_Linefollow(pidValue);
+  // }
  
-  motor1.stop();
-  motor2.stop();
+  // motor1.stop();
+  // motor2.stop();
 
   smoothMoveServo(baseServo,basePos,10);
   delay(500);
@@ -1076,14 +1100,14 @@ void move_for_grabbing(){
   //grabing code
   delay(500);
 
-  encoderCountA=0;
-  encoderCountB=0;
-  while((encoderCountA < 30) && (encoderCountB < 30)){
-    encoder_backward();
-  }
-  motor1.stop();
-  motor2.stop();
-  delay(500);
+  // encoderCountA=0;
+  // encoderCountB=0;
+  // while((encoderCountA < 30) && (encoderCountB < 30)){
+  //   encoder_backward();
+  // }
+  // motor1.stop();
+  // motor2.stop();
+  // delay(500);
   //half_rotation();
   
 
@@ -1204,12 +1228,13 @@ void colomcheck(){
     green_detect= Green_White_Detect();
     if (green_detect == 1){
       //turnRight45();
-      turnRight();
-      //move_for_grabbing();
-      ball_count++;   //change
-      delay(2000);
+      turnRight45();
+      motor1.stop();
+      motor2.stop();
+      delay(500);
+      move_for_grabbing();
 
-      turnLeft();
+      turnLeft45();
       //turnLeft45();
       plus = 0;
     }
@@ -1226,13 +1251,14 @@ void colomcheck(){
     green_detect= Green_White_Detect();
     if (green_detect == 1){
       //turnRight45();
-      turnRight();
-      //move_for_grabbing();
-      ball_count++;
-      delay(2000);
-    
-      //turnLeft();
-      half_rotation_L();
+      turnRight45();
+      motor1.stop();
+      motor2.stop();
+      delay(500);
+      move_for_grabbing();
+
+      turnLeft45();
+      turnLeft();
       plus = 4;
     }
     else{
@@ -1251,13 +1277,14 @@ void colomcheck(){
     turnLeft();
     green_detect= Green_White_Detect();
     if (green_detect == 1){
-      turnRight();
-      //turnLeft45();
-      //move_for_grabbing();
-      ball_count++;
-      delay(2000);
+      turnRight45();
+      motor1.stop();
+      motor2.stop();
+      delay(500);
+      move_for_grabbing();
 
-      half_rotation_L();
+      turnLeft45();
+      turnLeft();
       plus = 3;   
     }
     else{
