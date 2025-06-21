@@ -40,6 +40,7 @@ The intelligence behind our robot lies in its comprehensive set of autonomous na
 
 ---
 
+
 ## Competition Journey
 
 Our journey to the SLRC 2025 finals involved mastering a series of intricate tasks. The competition's ultimate challenge presented us with eight distinct objectives, all to be completed within a tight 30-minute window. Our robot excelled in:
@@ -56,6 +57,9 @@ Our performance in these tasks, particularly our robot's ability to seamlessly t
 ---
 
 ## Repository Contents
+<a href="https://www.youtube.com/playlist?list=PLlHsnM4HvxIXiOL1R_bP6fXcMqRAJK7PN" target="_blank">
+  <img src="assets/yt-thumb.jpg" alt="Watch YouTube Playlist" width="400"/>
+</a>
 
 This repository contains all the essential files and source codes that powered our PixieBots robot at SLRC 2025. Explore the code to understand the algorithms, sensor integrations, and control systems that made our robot a top contender.
 
