@@ -73,3 +73,6 @@ Our performance in these tasks, particularly our robot's ability to seamlessly t
 This repository contains all the essential files and source codes that powered our PixieBots robot at SLRC 2025. Explore the code to understand the algorithms, sensor integrations, and control systems that made our robot a top contender.
 
 We hope this repository provides valuable insights into our engineering process and inspires future robotic endeavors!
+<img src="https://github.com/user-attachments/assets/9e4eff17-1b43-4d92-af4e-81c0b62a5fda" width="500">
+
+
