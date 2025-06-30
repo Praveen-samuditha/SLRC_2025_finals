@@ -33,10 +33,8 @@ The intelligence behind our robot lies in its comprehensive set of autonomous na
 
 * **Ramp Navigation & Speed Control:** Intelligently detecting ramps (like the 20-degree incline in the competition) and automatically adjusting its speed to ascend and descend safely and efficiently. This ensures stability and optimal performance on uneven terrain.
 
-<iframe width="500" height="281" 
-  src="https://youtu.be/zhswnPzu45Y" 
-  frameborder="0" allowfullscreen>
-</iframe>
+[![Watch the video](https://img.youtube.com/vi/zhswnPzu45Y/0.jpg)](https://youtu.be/zhswnPzu45Y)
+
 
 
 
