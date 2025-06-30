@@ -64,7 +64,7 @@ Our performance in these tasks, particularly our robot's ability to seamlessly t
 ## Repository Contents
 
 
-[![Watch the Playlist](https://img.youtube.com/vi/shorts/lcyCcpWFLiU/0.jpg)](https://youtube.com/shorts/lcyCcpWFLiU?feature=share)
+[![Watch the Playlist](https://img.youtube.com/vi/shorts/lcyCcpWFLiU?feature=share/0.jpg)](https://youtube.com/shorts/lcyCcpWFLiU?feature=share)
 
 
 
