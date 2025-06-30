@@ -14,7 +14,8 @@ Our robot boasts a compact and robust mechanical design, measuring approximately
 * **Color-Based Classification:** Accurately detecting and differentiating ping-pong balls by color, a critical aspect of the competition's sorting tasks.
 * **Integrated Storage:** Efficiently storing two separately classified ping-pong balls within dedicated on-board compartments, ensuring organized collection during missions.
 
-*(Suitable Image: A clear, well-lit image of your robot with its arm extended or in a neutral position. If possible, show a close-up of the arm mechanism.)*
+![slrc7](https://github.com/user-attachments/assets/15deb444-ed58-443b-bc34-a909440662ed)
+
 
 ---
 
