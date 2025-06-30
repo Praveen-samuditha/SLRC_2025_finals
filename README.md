@@ -62,9 +62,10 @@ Our performance in these tasks, particularly our robot's ability to seamlessly t
 ---
 
 ## Repository Contents
-<a href="https://www.youtube.com/playlist?list=PLlHsnM4HvxIXiOL1R_bP6fXcMqRAJK7PN" target="_blank">
-  <img src="assets/yt-thumb.jpg" alt="Watch YouTube Playlist" width="400"/>
-</a>
+
+
+[![Watch the Playlist](assets/yt-thumb.jpg)](https://www.youtube.com/playlist?list=PLlHsnM4HvxIXiOL1R_bP6fXcMqRAJK7PN)
+
 
 This repository contains all the essential files and source codes that powered our PixieBots robot at SLRC 2025. Explore the code to understand the algorithms, sensor integrations, and control systems that made our robot a top contender.
 
