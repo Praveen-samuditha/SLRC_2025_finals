@@ -14,8 +14,7 @@ Our robot boasts a compact and robust mechanical design, measuring approximately
 * **Color-Based Classification:** Accurately detecting and differentiating ping-pong balls by color, a critical aspect of the competition's sorting tasks.
 * **Integrated Storage:** Efficiently storing two separately classified ping-pong balls within dedicated on-board compartments, ensuring organized collection during missions.
 
-<img src="https://github.com/user-attachments/assets/7d0a1040-34d2-4086-a223-efd32bef9dbf" width="500">
-
+<img src="https://github.com/user-attachments/assets/5353fcd7-91c0-462a-a587-c2c1568617ba" width="500">
 
 
 
@@ -30,11 +29,16 @@ The intelligence behind our robot lies in its comprehensive set of autonomous na
 * **Dotted Line Following:** Demonstrating advanced line tracking capabilities by accurately following segmented or dotted lines.
 * **Obstacle Detection:** Proactively identifying and avoiding obstacles, ensuring smooth and uninterrupted movement through challenging courses.
 
-*(Suitable Image: A diagram or a photo illustrating the robot on a test track with lines and junctions, perhaps highlighting its sensors if visible.)*
+
 
 * **Ramp Navigation & Speed Control:** Intelligently detecting ramps (like the 20-degree incline in the competition) and automatically adjusting its speed to ascend and descend safely and efficiently. This ensures stability and optimal performance on uneven terrain.
 
-*(Suitable Image: A photo of your robot on a ramp, either ascending or descending, to visually represent this capability.)*
+<iframe width="500" height="281" 
+  src="https://youtu.be/zhswnPzu45Y" 
+  frameborder="0" allowfullscreen>
+</iframe>
+
+
 
 * **Barcode Reading (IR Sensor):** Utilizing an Infrared (IR) (IR) sensor for reliable barcode detection, enabling the robot to gather critical information from its environment.
 * **Encoder PID for Straight-Line Navigation:** Employing a Proportional-Integral-Derivative (PID) control system with encoders to maintain exceptional straight-line movement, minimizing error and ensuring precise positioning.
